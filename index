@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tablero de Control & Cashflow — Congelados Puntanos</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  .active-tab{border-bottom:3px solid #2563eb;color:#fff;font-weight:600;}
+  .prog{height:6px;border-radius:999px;background:#e2e8f0;overflow:hidden;}
+  .prog>div{height:100%;border-radius:999px;}
+  ::-webkit-scrollbar{height:6px;width:6px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px;}
+  .spinner{border:2px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;width:14px;height:14px;animation:spin .7s linear infinite;display:inline-block;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+
+<!-- BANNER CONFIG API -->
+<div id="configBanner" class="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-3 flex items-center justify-center gap-2 flex-wrap">
+  <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+  <span>Configurá la URL de tu Apps Script Web App para conectar datos reales:</span>
+  <input id="apiUrlInput" type="text" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="text-slate-800 text-xs rounded px-2 py-1 w-80 max-w-full">
+  <button onclick="guardarApiUrl()" class="bg-slate-900 hover:bg-slate-800 px-3 py-1 rounded text-xs font-semibold">Guardar</button>
+  <span id="apiStatus" class="text-xs font-semibold"></span>
+</div>
+
+<!-- HEADER -->
+<header class="bg-slate-900 text-white shadow-lg">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
+    <div class="flex items-center space-x-3">
+      <div class="bg-blue-600 p-2 rounded-lg"><i data-lucide="trending-up" class="w-6 h-6 text-white"></i></div>
+      <div>
+        <h1 class="text-xl font-bold tracking-wide">Congelados Puntanos</h1>
+        <p class="text-xs text-slate-400">Tablero Dinámico de Cashflow & Control Operativo</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-3">
+      <span id="lastUpdateBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-700 text-slate-300 border border-slate-600">
+        <span class="w-2 h-2 rounded-full bg-slate-400"></span> Sin conectar
+      </span>
+      <button onclick="cargarDashboard()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Actualizar</button>
+    </div>
+  </div>
+  <div class="bg-slate-800 border-t border-slate-700">
+    <div class="max-w-7xl mx-auto px-4 flex space-x-6 text-sm overflow-x-auto text-slate-300">
+      <button onclick="switchTab('resumen')" id="tab-resumen" class="py-3 px-1 active-tab flex items-center gap-2 whitespace-nowrap"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Resumen & Cashflow</button>
+      <button onclick="switchTab('cumplimiento')" id="tab-cumplimiento" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="check-square" class="w-4 h-4"></i>Cumplimiento</button>
+      <button onclick="switchTab('ventas')" id="tab-ventas" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="line-chart" class="w-4 h-4"></i>Ventas & Cobranza</button>
+      <button onclick="switchTab('cobranzas')" id="tab-cobranzas" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="receipt" class="w-4 h-4"></i>Cta.Cte.</button>
+      <button onclick="switchTab('compras')" id="tab-compras" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="shopping-cart" class="w-4 h-4"></i>Compras</button>
+      <button onclick="switchTab('gastos')" id="tab-gastos" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="wallet" class="w-4 h-4"></i>Gastos</button>
+      <button onclick="switchTab('deuda')" id="tab-deuda" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="landmark" class="w-4 h-4"></i>Deuda Financiera</button>
+      <button onclick="switchTab('historico')" id="tab-historico" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="history" class="w-4 h-4"></i>Histórico</button>
+      <button onclick="switchTab('alertas')" id="tab-alertas" class="py-3 px-1 hover:text-white flex items-center gap-2 whitespace-nowrap"><i data-lucide="bell" class="w-4 h-4"></i>Alertas</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+
+  <!-- KPI STRIP -->
+  <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ventas último día cargado</p>
+      <h3 class="text-2xl font-bold text-slate-900 mt-2" id="kpiVentas">—</h3>
+      <p class="text-xs text-slate-500 mt-1" id="kpiVentasSub">Sin datos aún</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cobrado último día</p>
+      <h3 class="text-2xl font-bold text-slate-900 mt-2" id="kpiCobranza">—</h3>
+      <p class="text-xs text-slate-500 mt-1" id="kpiCobranzaSub">Sin datos aún</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Plata en la Calle (Cta.Cte.)</p>
+      <h3 class="text-2xl font-bold text-indigo-600 mt-2" id="kpiCtaCte">—</h3>
+      <p class="text-xs text-rose-600 font-semibold mt-1" id="kpiCtaCteSub">—</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Deuda a Proveedores</p>
+      <h3 class="text-2xl font-bold text-rose-600 mt-2" id="kpiProveedores">—</h3>
+      <p class="text-xs text-slate-500 mt-1" id="kpiProveedoresSub">—</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Crédito Nación disponible</p>
+      <h3 class="text-2xl font-bold text-amber-600 mt-2" id="kpiCredito">$192.000.000</h3>
+      <p class="text-xs text-slate-500 mt-1">Se aplica progresivamente a los descubiertos</p>
+    </div>
+  </section>
+
+  <!-- ═══════════ RESUMEN ═══════════ -->
+  <div id="view-resumen" class="space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="line-chart" class="w-5 h-5 text-blue-600"></i>Cashflow completo — 90 días (13 semanas)</h2>
+        <span class="text-xs bg-slate-100 px-2.5 py-1 rounded text-slate-600" id="planActivoLabel">Plan Oficial 90 días</span>
+      </div>
+      <div class="h-80 w-full"><canvas id="cashflowChart"></canvas></div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <h2 class="font-bold text-slate-800 text-base mb-3">Detalle semanal — Plan vs. Real</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Sem</th><th class="p-3">Fecha</th><th class="p-3 text-right">Ventas Plan</th><th class="p-3 text-right">Ventas Real</th><th class="p-3 text-right">Flujo Acum. Plan</th><th class="p-3 text-right">Flujo Acum. Real</th></tr></thead>
+          <tbody id="tablaCashflow" class="divide-y divide-slate-100"><tr><td colspan="6" class="p-4 text-center text-slate-400">Conectá la API para ver el detalle</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ CUMPLIMIENTO ═══════════ -->
+  <div id="view-cumplimiento" class="hidden space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h2 class="font-bold text-slate-800 text-lg">Cumplimiento de Compromisos</h2>
+        <button onclick="abrirModalCumplimiento()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Cargar / actualizar estado</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Sem</th><th class="p-3">Compromiso</th><th class="p-3 text-right">Planificado</th><th class="p-3 text-right">Real</th><th class="p-3 text-center">Estado</th><th class="p-3">Notas</th></tr></thead>
+          <tbody id="tablaCumplimiento" class="divide-y divide-slate-100"><tr><td colspan="6" class="p-4 text-center text-slate-400">Conectá la API para ver los compromisos</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ VENTAS & COBRANZA (CARGA REAL) ═══════════ -->
+  <div id="view-ventas" class="hidden space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-blue-600"></i>Cargar Ventas_dd-mm-aaaa.xls</h2>
+        <input type="file" id="fileVentas" accept=".xls,.xlsx" class="text-xs w-full border border-slate-300 rounded-lg p-2">
+        <button onclick="procesarVentas()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-medium w-full flex items-center justify-center gap-2"><i data-lucide="upload-cloud" class="w-4 h-4"></i>Procesar y subir ventas</button>
+        <div id="ventasResultado" class="text-xs"></div>
+      </div>
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-emerald-600"></i>Cargar Cobranzas_dd-mm-aaaa.xls</h2>
+        <input type="file" id="fileCobranzas" accept=".xls,.xlsx" class="text-xs w-full border border-slate-300 rounded-lg p-2">
+        <button onclick="procesarCobranzas()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium w-full flex items-center justify-center gap-2"><i data-lucide="upload-cloud" class="w-4 h-4"></i>Procesar y subir cobranzas</button>
+        <div id="cobranzasResultado" class="text-xs"></div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <h2 class="font-bold text-slate-800 text-base mb-3">Ventas por vendedor — último día cargado</h2>
+      <table class="w-full text-left text-xs text-slate-600">
+        <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-2">Vendedor</th><th class="p-2 text-right">Ventas</th></tr></thead>
+        <tbody id="tablaVentasVendedor" class="divide-y divide-slate-100"><tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos aún</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ CTA.CTE (REAL, VÍA API) ═══════════ -->
+  <div id="view-cobranzas" class="hidden space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <div><h2 class="font-bold text-slate-800 text-lg">Cuentas corrientes — plata en la calle</h2><p class="text-xs text-slate-500" id="ctacteSubtitle">Base: archivo subido al 21/07/2026</p></div>
+        <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="download" class="w-3.5 h-3.5"></i>Emitir listado de cobranza</button>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="p-3 bg-slate-50 rounded-lg border"><p class="text-[10px] uppercase text-slate-500 font-semibold">Total cta.cte.</p><p class="text-lg font-bold text-slate-900" id="ctacteTotal">—</p></div>
+        <div class="p-3 bg-emerald-50 rounded-lg border border-emerald-200"><p class="text-[10px] uppercase text-slate-500 font-semibold">A vencer</p><p class="text-lg font-bold text-emerald-600" id="ctacteAVencer">—</p></div>
+        <div class="p-3 bg-amber-50 rounded-lg border border-amber-200"><p class="text-[10px] uppercase text-slate-500 font-semibold">Vencido 1-30d</p><p class="text-lg font-bold text-amber-600" id="ctacteVenc30">—</p></div>
+        <div class="p-3 bg-rose-50 rounded-lg border border-rose-200"><p class="text-[10px] uppercase text-slate-500 font-semibold">Vencido +30d</p><p class="text-lg font-bold text-rose-600" id="ctacteVencMas30">—</p></div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Cliente</th><th class="p-3 text-right">Saldo</th></tr></thead>
+          <tbody id="tablaTopClientes" class="divide-y divide-slate-100"><tr><td colspan="2" class="p-4 text-center text-slate-400">Conectá la API para ver el detalle</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+      <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="git-merge" class="w-5 h-5 text-blue-600"></i>Pendientes de conciliar</h2>
+      <table class="w-full text-left text-xs text-slate-600">
+        <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-2">Fecha</th><th class="p-2">Cliente</th><th class="p-2">Comprobante</th><th class="p-2 text-right">Monto</th><th class="p-2">Motivo</th></tr></thead>
+        <tbody id="tablaPendientes" class="divide-y divide-slate-100"><tr><td colspan="5" class="p-4 text-center text-slate-400">Sin pendientes</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ COMPRAS ═══════════ -->
+  <div id="view-compras" class="hidden space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h2 class="font-bold text-slate-800 text-base">Cargar factura de proveedor</h2>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <input id="fProveedor" placeholder="Proveedor" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="fNroFactura" placeholder="N° Factura" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="fMonto" type="number" placeholder="Monto" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="fFormaPago" placeholder="Forma de pago" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="fVencimiento" type="date" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="fSemanaPlan" type="number" placeholder="Semana del plan" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+      </div>
+      <button onclick="cargarFactura()" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-medium">Guardar factura</button>
+      <div id="facturaResultado" class="text-xs"></div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <h2 class="font-bold text-slate-800 text-base mb-3">Deuda comercial por proveedor</h2>
+      <table class="w-full text-left text-xs text-slate-600">
+        <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Proveedor</th><th class="p-3 text-right">Saldo total</th></tr></thead>
+        <tbody id="tablaProveedores" class="divide-y divide-slate-100"><tr><td colspan="2" class="p-4 text-center text-slate-400">Conectá la API para ver el detalle</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ GASTOS ═══════════ -->
+  <div id="view-gastos" class="hidden space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <h2 class="font-bold text-slate-800 text-base">Registrar gasto operativo</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <input id="gFecha" type="date" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <select id="gCategoria" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+          <option>Combustible</option><option>Peajes/Viáticos</option><option>Mantenimiento</option><option>Sueldos</option><option>Otros</option>
+        </select>
+        <input id="gMonto" type="number" placeholder="Monto" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="gResponsable" placeholder="Responsable" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+      </div>
+      <button onclick="cargarGasto()" class="bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-medium">Guardar gasto</button>
+      <div id="gastoResultado" class="text-xs"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ DEUDA FINANCIERA ═══════════ -->
+  <div id="view-deuda" class="hidden space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <h2 class="font-bold text-slate-800 text-base">Créditos, cuotas y descubiertos</h2>
+      <table class="w-full text-left text-xs text-slate-600">
+        <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Banco</th><th class="p-3">Tipo</th><th class="p-3">Vence</th><th class="p-3 text-right">Monto</th><th class="p-3 text-right">Saldo</th></tr></thead>
+        <tbody id="tablaDeuda" class="divide-y divide-slate-100"><tr><td colspan="5" class="p-4 text-center text-slate-400">Conectá la API para ver el detalle</td></tr></tbody>
+      </table>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i>Registrar asignación semanal del crédito Nación</h2>
+      <p class="text-xs text-slate-500">Se va aplicando progresivamente a los descubiertos ya tomados, según lo necesite el flujo de caja.</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <input id="aSemana" type="number" placeholder="Semana" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="aICBC" type="number" placeholder="Aplicado a ICBC" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="aSupervielle" type="number" placeholder="Aplicado a Supervielle" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+        <input id="aCaja" type="number" placeholder="Aplicado a bache de caja" class="border border-slate-300 rounded-lg px-3 py-2 text-xs">
+      </div>
+      <button onclick="registrarAsignacion()" class="bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-medium">Registrar</button>
+      <div id="asignacionResultado" class="text-xs"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ HISTÓRICO ═══════════ -->
+  <div id="view-historico" class="hidden space-y-6">
+    <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-900 flex items-start gap-2">
+      <i data-lucide="flask-conical" class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5"></i>
+      <p>Esta vista se alimenta de la pestaña <span class="font-mono">Historico_Mensual</span> del Sheet, que se va completando mes a mes independientemente del plan de 90 días vigente.</p>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <h2 class="font-bold text-slate-800 text-base">Evolución mensual — monitor permanente</h2>
+      <div class="h-72 w-full"><canvas id="historicoChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ALERTAS ═══════════ -->
+  <div id="view-alertas" class="hidden space-y-6">
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3" id="alertasContainer">
+      <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="bell" class="w-5 h-5 text-amber-500"></i>Alertas activas</h2>
+      <p class="text-xs text-slate-400">Conectá la API para calcular alertas en base a datos reales.</p>
+    </div>
+  </div>
+
+</main>
+
+<footer class="bg-white border-t border-slate-200 py-4">
+  <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">Congelados Puntanos — Tablero de Control de Cashflow</div>
+</footer>
+
+<script>
+lucide.createIcons();
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG API
+// ═══════════════════════════════════════════════════════════════
+let API_URL = localStorage.getItem('cp_api_url') || '';
+document.getElementById('apiUrlInput').value = API_URL;
+if (API_URL) document.getElementById('configBanner').classList.add('hidden');
+
+function guardarApiUrl() {
+  API_URL = document.getElementById('apiUrlInput').value.trim();
+  localStorage.setItem('cp_api_url', API_URL);
+  document.getElementById('apiStatus').textContent = 'Guardado ✓';
+  cargarDashboard();
+}
+
+function fmtMoney(n) {
+  n = Number(n || 0);
+  return '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  const tabs = ['resumen', 'cumplimiento', 'ventas', 'cobranzas', 'compras', 'gastos', 'deuda', 'historico', 'alertas'];
+  tabs.forEach(t => { document.getElementById(`view-${t}`).classList.add('hidden'); document.getElementById(`tab-${t}`).classList.remove('active-tab'); });
+  document.getElementById(`view-${tab}`).classList.remove('hidden');
+  document.getElementById(`tab-${tab}`).classList.add('active-tab');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CARGA DE VENTAS (parseo client-side)
+// Estructura real del export Axum: datos desde la fila 7 (índice 6),
+// columnas: 0 Fecha, 1 CodCli, 2 Razon, 3 Direccion, 5 Localidad,
+// 6 Ramo, 7 Vendedor, 9 CodSKU, 11 DescSKU, 13 Precio(=importe), 14 Volumen
+// ═══════════════════════════════════════════════════════════════
+function leerArchivo(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+        resolve(rows);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsBinaryString(file);
+  });
+}
+
+function esFecha(v) { return v instanceof Date && !isNaN(v); }
+
+async function procesarVentas() {
+  const input = document.getElementById('fileVentas');
+  const out = document.getElementById('ventasResultado');
+  if (!input.files.length) { out.innerHTML = '<span class="text-rose-600">Elegí un archivo primero.</span>'; return; }
+  out.innerHTML = '<span class="spinner"></span> Procesando...';
+  try {
+    const rows = await leerArchivo(input.files[0]);
+    // autodetectar inicio de datos: primera fila con Fecha valida y CodSKU no vacio
+    let start = -1;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      if (esFecha(rows[i][0]) && rows[i][9]) { start = i; break; }
+    }
+    if (start === -1) throw new Error('No se pudo detectar el inicio de los datos. Verificá el formato del archivo.');
+    const data = [];
+    let fechaStr = '';
+    for (let i = start; i < rows.length; i++) {
+      const r = rows[i];
+      if (!esFecha(r[0])) continue;
+      fechaStr = Utilities_formatDate(r[0]);
+      data.push({
+        Fecha: fechaStr, CodCliente: r[1], Cliente: r[2], Localidad: r[5], Ramo: r[6],
+        Vendedor: r[7], CodSKU: r[9], DescSKU: r[11], Importe: Number(r[13] || 0), Volumen: Number(r[14] || 0)
+      });
+    }
+    if (!API_URL) { out.innerHTML = `<span class="text-amber-600">Parseado OK: ${data.length} líneas, total ${fmtMoney(data.reduce((a,d)=>a+d.Importe,0))}. Configurá la API arriba para subirlo.</span>`; return; }
+    const fd = new FormData();
+    fd.append('action', 'uploadVentas');
+    fd.append('fecha', fechaStr);
+    fd.append('data', JSON.stringify(data));
+    const resp = await fetch(API_URL, { method: 'POST', body: fd });
+    const json = await resp.json();
+    if (json.ok) {
+      out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas cargadas — total ${fmtMoney(json.total)}</span>`;
+      cargarDashboard();
+    } else {
+      out.innerHTML = `<span class="text-rose-600">${json.error}</span>`;
+    }
+  } catch (err) {
+    out.innerHTML = `<span class="text-rose-600">Error: ${err.message}</span>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CARGA DE COBRANZAS (parseo client-side)
+// Estructura real: header en fila índice 1, datos desde índice 2.
+// columnas: 0 Cliente, 1 Recibo, 2 FechaRecibo, 3 $Imputado, 5 Comprobante,
+// 6 Fecha comprobante, 7 $Comprobante, 8 Vendedor, 9 DiasDif
+// ═══════════════════════════════════════════════════════════════
+async function procesarCobranzas() {
+  const input = document.getElementById('fileCobranzas');
+  const out = document.getElementById('cobranzasResultado');
+  if (!input.files.length) { out.innerHTML = '<span class="text-rose-600">Elegí un archivo primero.</span>'; return; }
+  out.innerHTML = '<span class="spinner"></span> Procesando...';
+  try {
+    const rows = await leerArchivo(input.files[0]);
+    let start = -1;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      if (typeof rows[i][0] === 'number' && typeof rows[i][1] === 'string' && esFecha(rows[i][2]) && typeof rows[i][3] === 'number') { start = i; break; }
+    }
+    if (start === -1) throw new Error('No se pudo detectar el inicio de los datos. Verificá el formato del archivo.');
+    const data = [];
+    let fechaStr = '';
+    for (let i = start; i < rows.length; i++) {
+      const r = rows[i];
+      if (typeof r[0] !== 'number' && typeof r[0] !== 'string') continue;
+      if (!esFecha(r[2])) continue;
+      fechaStr = Utilities_formatDate(r[2]);
+      data.push({
+        Cliente: r[0], Recibo: r[1], FechaRecibo: fechaStr, Comprobante: r[5],
+        FechaComprobante: esFecha(r[6]) ? Utilities_formatDate(r[6]) : '', ImporteComprobante: Number(r[7] || 0),
+        Imputado: Number(r[3] || 0), Vendedor: r[8], DiasDif: r[9]
+      });
+    }
+    if (!API_URL) { out.innerHTML = `<span class="text-amber-600">Parseado OK: ${data.length} líneas. Configurá la API arriba para subirlo.</span>`; return; }
+    const fd = new FormData();
+    fd.append('action', 'uploadCobranzas');
+    fd.append('fecha', fechaStr);
+    fd.append('data', JSON.stringify(data));
+    const resp = await fetch(API_URL, { method: 'POST', body: fd });
+    const json = await resp.json();
+    if (json.ok) {
+      out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas · ${json.pagadas} pagadas · ${json.parciales} parciales · ${json.pendientes} a conciliar · ${json.duplicados} duplicados ignorados</span>`;
+      cargarDashboard();
+    } else {
+      out.innerHTML = `<span class="text-rose-600">${json.error}</span>`;
+    }
+  } catch (err) {
+    out.innerHTML = `<span class="text-rose-600">Error: ${err.message}</span>`;
+  }
+}
+
+function Utilities_formatDate(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORMULARIOS SIMPLES (facturas proveedor, gastos, asignación crédito)
+// ═══════════════════════════════════════════════════════════════
+async function postAccion(action, data, outId) {
+  const out = outId ? document.getElementById(outId) : null;
+  if (!API_URL) { if (out) out.innerHTML = '<span class="text-amber-600">Configurá la API primero.</span>'; return; }
+  if (out) out.innerHTML = '<span class="spinner"></span> Guardando...';
+  const fd = new FormData();
+  fd.append('action', action);
+  fd.append('data', JSON.stringify(data));
+  const resp = await fetch(API_URL, { method: 'POST', body: fd });
+  const json = await resp.json();
+  if (out) out.innerHTML = json.ok ? '<span class="text-emerald-600 font-semibold">✓ Guardado</span>' : `<span class="text-rose-600">${json.error}</span>`;
+  return json;
+}
+
+function cargarFactura() {
+  postAccion('uploadFactura', {
+    Fecha: document.getElementById('fVencimiento').value, Proveedor: document.getElementById('fProveedor').value,
+    NroFactura: document.getElementById('fNroFactura').value, Monto: Number(document.getElementById('fMonto').value),
+    FormaPago: document.getElementById('fFormaPago').value, Vencimiento: document.getElementById('fVencimiento').value,
+    SemanaPlan: document.getElementById('fSemanaPlan').value
+  }, 'facturaResultado').then(() => cargarDashboard());
+}
+
+function cargarGasto() {
+  postAccion('uploadGasto', {
+    Fecha: document.getElementById('gFecha').value, Categoria: document.getElementById('gCategoria').value,
+    Monto: Number(document.getElementById('gMonto').value), Responsable: document.getElementById('gResponsable').value, Comprobante: ''
+  }, 'gastoResultado');
+}
+
+function registrarAsignacion() {
+  postAccion('asignarCredito', {
+    Semana: document.getElementById('aSemana').value, AplicadoICBC: Number(document.getElementById('aICBC').value || 0),
+    AplicadoSupervielle: Number(document.getElementById('aSupervielle').value || 0), AplicadoCajaBache: Number(document.getElementById('aCaja').value || 0)
+  }, 'asignacionResultado').then(() => cargarDashboard());
+}
+
+function abrirModalCumplimiento() {
+  const sem = prompt('Semana:'); if (!sem) return;
+  const compromiso = prompt('Compromiso (texto exacto como aparece en la tabla):'); if (!compromiso) return;
+  const estado = prompt('Estado (Cumplido / Parcial / Incumplido / Pendiente):'); if (!estado) return;
+  const notas = prompt('Notas (opcional):') || '';
+  postAccion('updateCumplimiento', { Semana: sem, Compromiso: compromiso, Estado: estado, Notas: notas }).then(() => cargarDashboard());
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD — carga de datos reales
+// ═══════════════════════════════════════════════════════════════
+let chartCashflow, chartHistorico;
+
+async function cargarDashboard() {
+  if (!API_URL) return;
+  try {
+    const resp = await fetch(`${API_URL}?action=dashboard`);
+    const d = await resp.json();
+    if (d.error) { console.error(d.error); return; }
+
+    document.getElementById('lastUpdateBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Última venta: ${d.ultimaFecha || '—'}`;
+    document.getElementById('kpiVentas').textContent = fmtMoney(d.ventasHoyTotal);
+    document.getElementById('kpiCobranza').textContent = fmtMoney(d.cobranzasHoyTotal);
+    document.getElementById('kpiCtaCte').textContent = fmtMoney(d.ctacte.total);
+    const pctVenc = d.ctacte.total ? Math.round((d.ctacte.venc1_30 + d.ctacte.vencMas30) / d.ctacte.total * 100) : 0;
+    document.getElementById('kpiCtaCteSub').textContent = `${pctVenc}% vencida`;
+    document.getElementById('kpiProveedores').textContent = fmtMoney(d.proveedores.total);
+    document.getElementById('planActivoLabel').textContent = d.planActivo ? d.planActivo.NombrePlan : 'Sin plan activo';
+
+    // top clientes
+    const tbody = document.getElementById('tablaTopClientes');
+    tbody.innerHTML = d.ctacte.topClientes.map(c => `<tr><td class="p-3 font-medium">${c.cliente}</td><td class="p-3 text-right font-bold">${fmtMoney(c.saldo)}</td></tr>`).join('') || '<tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos</td></tr>';
+    document.getElementById('ctacteTotal').textContent = fmtMoney(d.ctacte.total);
+    document.getElementById('ctacteAVencer').textContent = fmtMoney(d.ctacte.aVencer);
+    document.getElementById('ctacteVenc30').textContent = fmtMoney(d.ctacte.venc1_30);
+    document.getElementById('ctacteVencMas30').textContent = fmtMoney(d.ctacte.vencMas30);
+
+    // proveedores
+    const tbodyProv = document.getElementById('tablaProveedores');
+    tbodyProv.innerHTML = Object.entries(d.proveedores.porProveedor).sort((a, b) => b[1] - a[1])
+      .map(([p, v]) => `<tr><td class="p-3 font-medium">${p}</td><td class="p-3 text-right font-bold">${fmtMoney(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos</td></tr>';
+
+    // pendientes de conciliar
+    const respPend = await fetch(`${API_URL}?action=pendientes`);
+    const pend = await respPend.json();
+    const tbodyPend = document.getElementById('tablaPendientes');
+    tbodyPend.innerHTML = pend.length ? pend.map(p => `<tr><td class="p-2">${p.Fecha}</td><td class="p-2">${p.Cliente}</td><td class="p-2">${p.Comprobante}</td><td class="p-2 text-right">${fmtMoney(p.Monto)}</td><td class="p-2">${p.Motivo}</td></tr>`).join('') : '<tr><td colspan="5" class="p-4 text-center text-slate-400">Sin pendientes</td></tr>';
+
+    // cumplimiento
+    const tbodyCump = document.getElementById('tablaCumplimiento');
+    tbodyCump.innerHTML = d.cumplimiento.map(c => {
+      const color = c.Estado === 'Cumplido' ? 'bg-emerald-100 text-emerald-700' : c.Estado === 'Incumplido' ? 'bg-rose-100 text-rose-700' : c.Estado === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600';
+      return `<tr><td class="p-3">${c.Semana}</td><td class="p-3 font-medium">${c.Compromiso}</td><td class="p-3 text-right">${fmtMoney(c.Planificado)}</td><td class="p-3 text-right">${c.Real ? fmtMoney(c.Real) : '—'}</td><td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-semibold ${color}">${c.Estado}</span></td><td class="p-3 text-slate-500">${c.Notas || ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="p-4 text-center text-slate-400">Sin compromisos cargados</td></tr>';
+
+    // deuda financiera
+    const tbodyDeuda = document.getElementById('tablaDeuda');
+    tbodyDeuda.innerHTML = d.deuda.map(x => `<tr><td class="p-3 font-medium">${x.Banco}</td><td class="p-3">${x.TipoDeuda}</td><td class="p-3">${x.Vencimiento}</td><td class="p-3 text-right">${fmtMoney(x.MontoTotal)}</td><td class="p-3 text-right">${fmtMoney(x.SaldoPendiente)}</td></tr>`).join('');
+
+    // cashflow tabla + chart
+    const tbodyCF = document.getElementById('tablaCashflow');
+    const plan = d.cashflow.plan, real = d.cashflow.real;
+    tbodyCF.innerHTML = plan.map(p => {
+      const r = real.find(x => String(x.Sem) === String(p.Sem));
+      return `<tr><td class="p-3">${p.Sem}</td><td class="p-3">${p.Fecha}</td><td class="p-3 text-right">${fmtMoney(p.Ventas)}</td><td class="p-3 text-right">${r ? fmtMoney(r.VentasReal) : '—'}</td><td class="p-3 text-right">${fmtMoney(p.FlujoAcumProyectado)}</td><td class="p-3 text-right">${r ? fmtMoney(r.FlujoAcumReal) : '—'}</td></tr>`;
+    }).join('');
+
+    renderCashflowChart(plan, real);
+
+    // historico
+    if (d.historico && d.historico.length) renderHistoricoChart(d.historico);
+
+  } catch (err) {
+    console.error('Error cargando dashboard:', err);
+  }
+}
+
+function renderCashflowChart(plan, real) {
+  const labels = plan.map(p => 'S' + p.Sem);
+  const ingresos = plan.map(p => Number(p.TotalIngresos || 0));
+  const egresos = plan.map(p => Number(p.TotalEgresos || 0));
+  const acumPlan = plan.map(p => Number(p.FlujoAcumProyectado || 0));
+  const acumReal = plan.map(p => { const r = real.find(x => String(x.Sem) === String(p.Sem)); return r ? Number(r.FlujoAcumReal || 0) : null; });
+
+  if (chartCashflow) chartCashflow.destroy();
+  const ctx = document.getElementById('cashflowChart').getContext('2d');
+  chartCashflow = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Ingresos', data: ingresos, backgroundColor: 'rgba(16,185,129,0.55)', order: 2 },
+        { type: 'bar', label: 'Egresos', data: egresos, backgroundColor: 'rgba(244,63,94,0.55)', order: 2 },
+        { type: 'line', label: 'Acum. Plan', data: acumPlan, borderColor: '#2563eb', borderWidth: 2, tension: 0.3, yAxisID: 'y1', order: 1 },
+        { type: 'line', label: 'Acum. Real', data: acumReal, borderColor: '#0f766e', borderWidth: 3, pointRadius: 5, tension: 0.3, yAxisID: 'y1', order: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: {
+        y: { ticks: { callback: v => '$' + (v / 1000000).toFixed(0) + 'M' } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => '$' + (v / 1000000).toFixed(0) + 'M' } }
+      }
+    }
+  });
+}
+
+function renderHistoricoChart(historico) {
+  if (chartHistorico) chartHistorico.destroy();
+  const ctx = document.getElementById('historicoChart').getContext('2d');
+  chartHistorico = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: historico.map(h => h.Mes),
+      datasets: [
+        { label: 'Plata en la calle', data: historico.map(h => Number(h.PlataEnCalle)), borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.08)', borderWidth: 2, tension: 0.3, fill: true },
+        { label: 'Deuda a proveedores', data: historico.map(h => Number(h.DeudaProveedores)), borderColor: '#e11d48', backgroundColor: 'rgba(225,29,72,0.06)', borderWidth: 2, tension: 0.3, fill: true }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => '$' + (v / 1000000).toFixed(0) + 'M' } } } }
+  });
+}
+
+// Init
+if (API_URL) cargarDashboard();
+</script>
+</body>
+</html>
