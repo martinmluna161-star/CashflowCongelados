@@ -158,18 +158,27 @@
     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
       <div class="flex flex-wrap justify-between items-center gap-4">
         <div><h2 class="font-bold text-slate-800 text-lg">Cuentas corrientes — plata en la calle</h2><p class="text-xs text-slate-500" id="ctacteSubtitle">Base: archivo subido al 21/07/2026</p></div>
-        <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="download" class="w-3.5 h-3.5"></i>Emitir listado de cobranza</button>
+        <button onclick="imprimirListado()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="printer" class="w-3.5 h-3.5"></i>Generar listado para imprimir (filtro actual)</button>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div class="p-3 bg-slate-50 rounded-lg border"><p class="text-[10px] uppercase text-slate-500 font-semibold">Total cta.cte.</p><p class="text-lg font-bold text-slate-900" id="ctacteTotal">—</p></div>
-        <div class="p-3 bg-emerald-50 rounded-lg border border-emerald-200"><p class="text-[10px] uppercase text-slate-500 font-semibold">A vencer</p><p class="text-lg font-bold text-emerald-600" id="ctacteAVencer">—</p></div>
-        <div class="p-3 bg-amber-50 rounded-lg border border-amber-200"><p class="text-[10px] uppercase text-slate-500 font-semibold">Vencido 1-30d</p><p class="text-lg font-bold text-amber-600" id="ctacteVenc30">—</p></div>
-        <div class="p-3 bg-rose-50 rounded-lg border border-rose-200"><p class="text-[10px] uppercase text-slate-500 font-semibold">Vencido +30d</p><p class="text-lg font-bold text-rose-600" id="ctacteVencMas30">—</p></div>
+        <div onclick="filtrarBucket('todos')" class="cursor-pointer p-3 bg-slate-50 rounded-lg border hover:ring-2 hover:ring-slate-400 transition"><p class="text-[10px] uppercase text-slate-500 font-semibold">Total cta.cte.</p><p class="text-lg font-bold text-slate-900" id="ctacteTotal">—</p></div>
+        <div onclick="filtrarBucket('aVencer')" class="cursor-pointer p-3 bg-emerald-50 rounded-lg border border-emerald-200 hover:ring-2 hover:ring-emerald-400 transition"><p class="text-[10px] uppercase text-slate-500 font-semibold">A vencer</p><p class="text-lg font-bold text-emerald-600" id="ctacteAVencer">—</p></div>
+        <div onclick="filtrarBucket('venc1_30')" class="cursor-pointer p-3 bg-amber-50 rounded-lg border border-amber-200 hover:ring-2 hover:ring-amber-400 transition"><p class="text-[10px] uppercase text-slate-500 font-semibold">Vencido 1-30d</p><p class="text-lg font-bold text-amber-600" id="ctacteVenc30">—</p></div>
+        <div onclick="filtrarBucket('vencMas30')" class="cursor-pointer p-3 bg-rose-50 rounded-lg border border-rose-200 hover:ring-2 hover:ring-rose-400 transition"><p class="text-[10px] uppercase text-slate-500 font-semibold">Vencido +30d</p><p class="text-lg font-bold text-rose-600" id="ctacteVencMas30">—</p></div>
       </div>
-      <div class="overflow-x-auto">
+      <p class="text-[11px] text-slate-400">Tocá cualquiera de los montos de arriba para filtrar la tabla por ese grupo de vencimiento.</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input id="filtroCliente" type="text" placeholder="Buscar por cliente o comprobante..." oninput="renderTablaFacturas()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs w-64">
+        <input id="filtroFechaDesde" type="date" onchange="renderTablaFacturas()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs" title="Vencimiento desde">
+        <input id="filtroFechaHasta" type="date" onchange="renderTablaFacturas()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs" title="Vencimiento hasta">
+        <span id="filtroBucketActivo" class="text-[11px] bg-slate-100 px-2 py-1 rounded text-slate-600 hidden"></span>
+        <button onclick="limpiarFiltros()" class="text-[11px] text-blue-600 hover:underline">Limpiar filtros</button>
+        <span class="text-[11px] text-slate-400 ml-auto" id="contadorFacturas"></span>
+      </div>
+      <div class="overflow-x-auto max-h-96 overflow-y-auto">
         <table class="w-full text-left text-xs text-slate-600">
-          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Cliente</th><th class="p-3 text-right">Saldo</th></tr></thead>
-          <tbody id="tablaTopClientes" class="divide-y divide-slate-100"><tr><td colspan="2" class="p-4 text-center text-slate-400">Conectá la API para ver el detalle</td></tr></tbody>
+          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200 sticky top-0"><tr><th class="p-3">Cliente</th><th class="p-3">Comprobante</th><th class="p-3">Vencimiento</th><th class="p-3 text-center">Días</th><th class="p-3 text-right">Saldo</th></tr></thead>
+          <tbody id="tablaFacturas" class="divide-y divide-slate-100"><tr><td colspan="5" class="p-4 text-center text-slate-400">Conectá la API para ver el detalle</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -181,6 +190,7 @@
       </table>
     </div>
   </div>
+
 
   <!-- ═══════════ COMPRAS ═══════════ -->
   <div id="view-compras" class="hidden space-y-6">
@@ -478,6 +488,8 @@ function abrirModalCumplimiento() {
 // DASHBOARD — carga de datos reales
 // ═══════════════════════════════════════════════════════════════
 let chartCashflow, chartHistorico;
+let facturasDetalle = [];
+let bucketActivo = 'todos';
 
 async function cargarDashboard() {
   if (!API_URL) return;
@@ -495,13 +507,13 @@ async function cargarDashboard() {
     document.getElementById('kpiProveedores').textContent = fmtMoney(d.proveedores.total);
     document.getElementById('planActivoLabel').textContent = d.planActivo ? d.planActivo.NombrePlan : 'Sin plan activo';
 
-    // top clientes
-    const tbody = document.getElementById('tablaTopClientes');
-    tbody.innerHTML = d.ctacte.topClientes.map(c => `<tr><td class="p-3 font-medium">${c.cliente}</td><td class="p-3 text-right font-bold">${fmtMoney(c.saldo)}</td></tr>`).join('') || '<tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos</td></tr>';
+    // detalle completo de facturas (para filtros, clic en buckets e impresion)
+    facturasDetalle = d.ctacte.detalle || [];
     document.getElementById('ctacteTotal').textContent = fmtMoney(d.ctacte.total);
     document.getElementById('ctacteAVencer').textContent = fmtMoney(d.ctacte.aVencer);
     document.getElementById('ctacteVenc30').textContent = fmtMoney(d.ctacte.venc1_30);
     document.getElementById('ctacteVencMas30').textContent = fmtMoney(d.ctacte.vencMas30);
+    renderTablaFacturas();
 
     // proveedores
     const tbodyProv = document.getElementById('tablaProveedores');
@@ -587,6 +599,75 @@ function renderHistoricoChart(historico) {
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => '$' + (v / 1000000).toFixed(0) + 'M' } } } }
   });
+}
+
+const bucketLabels = { todos: 'Todos', aVencer: 'A vencer', venc1_30: 'Vencido 1-30 días', vencMas30: 'Vencido +30 días' };
+
+function filtrarBucket(bucket) {
+  bucketActivo = bucket;
+  const span = document.getElementById('filtroBucketActivo');
+  if (bucket === 'todos') { span.classList.add('hidden'); }
+  else { span.classList.remove('hidden'); span.textContent = 'Filtro: ' + bucketLabels[bucket]; }
+  renderTablaFacturas();
+}
+
+function limpiarFiltros() {
+  bucketActivo = 'todos';
+  document.getElementById('filtroCliente').value = '';
+  document.getElementById('filtroFechaDesde').value = '';
+  document.getElementById('filtroFechaHasta').value = '';
+  document.getElementById('filtroBucketActivo').classList.add('hidden');
+  renderTablaFacturas();
+}
+
+function facturasFiltradas() {
+  const texto = document.getElementById('filtroCliente').value.trim().toLowerCase();
+  const desde = document.getElementById('filtroFechaDesde').value;
+  const hasta = document.getElementById('filtroFechaHasta').value;
+  return facturasDetalle.filter(f => {
+    if (bucketActivo !== 'todos' && f.bucket !== bucketActivo) return false;
+    if (texto && !(String(f.cliente).toLowerCase().includes(texto) || String(f.comprobante).toLowerCase().includes(texto))) return false;
+    if (desde && f.fechaVenc && new Date(f.fechaVenc) < new Date(desde)) return false;
+    if (hasta && f.fechaVenc && new Date(f.fechaVenc) > new Date(hasta)) return false;
+    return true;
+  }).sort((a, b) => b.saldo - a.saldo);
+}
+
+function renderTablaFacturas() {
+  const lista = facturasFiltradas();
+  const tbody = document.getElementById('tablaFacturas');
+  const bucketColor = { aVencer: 'text-emerald-600', venc1_30: 'text-amber-600', vencMas30: 'text-rose-600', sinFecha: 'text-slate-400' };
+  tbody.innerHTML = lista.length ? lista.map(f => `<tr><td class="p-3 font-medium">${f.cliente}</td><td class="p-3">${f.comprobante}</td><td class="p-3">${f.fechaVenc || '—'}</td><td class="p-3 text-center ${bucketColor[f.bucket] || ''}">${f.dias !== null ? f.dias : '—'}</td><td class="p-3 text-right font-bold">${fmtMoney(f.saldo)}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="p-4 text-center text-slate-400">Sin resultados para este filtro</td></tr>';
+  const total = lista.reduce((a, f) => a + f.saldo, 0);
+  document.getElementById('contadorFacturas').textContent = `${lista.length} facturas · ${fmtMoney(total)}`;
+}
+
+function imprimirListado() {
+  const lista = facturasFiltradas();
+  const total = lista.reduce((a, f) => a + f.saldo, 0);
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html><head><title>Listado de Cobranza — Congelados Puntanos</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;}
+      h1{font-size:16px;margin-bottom:2px;} p.sub{font-size:11px;color:#64748b;margin-top:0;margin-bottom:16px;}
+      table{width:100%;border-collapse:collapse;font-size:11px;}
+      th{background:#f1f5f9;text-align:left;padding:6px 8px;border-bottom:2px solid #cbd5e1;}
+      td{padding:6px 8px;border-bottom:1px solid #e2e8f0;}
+      tfoot td{font-weight:bold;border-top:2px solid #334155;}
+      @media print{ button{display:none;} }
+    </style></head><body>
+    <h1>Listado de Cobranza — Congelados Puntanos</h1>
+    <p class="sub">Filtro: ${bucketLabels[bucketActivo]} · Generado ${new Date().toLocaleString('es-AR')} · ${lista.length} facturas</p>
+    <table>
+      <thead><tr><th>Cliente</th><th>Comprobante</th><th>Vencimiento</th><th>Días</th><th style="text-align:right">Saldo</th></tr></thead>
+      <tbody>${lista.map(f => `<tr><td>${f.cliente}</td><td>${f.comprobante}</td><td>${f.fechaVenc || '—'}</td><td>${f.dias !== null ? f.dias : '—'}</td><td style="text-align:right">${fmtMoney(f.saldo)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="4">TOTAL</td><td style="text-align:right">${fmtMoney(total)}</td></tr></tfoot>
+    </table>
+    <button onclick="window.print()" style="margin-top:16px;padding:8px 16px;">Imprimir / Guardar PDF</button>
+    </body></html>`);
+  win.document.close();
 }
 
 // Init
