@@ -133,7 +133,13 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
         <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-blue-600"></i>Cargar Ventas_dd-mm-aaaa.xls</h2>
+        <p class="text-[11px] text-slate-400">Formato "Detalle de Comprobantes por Cliente" (con nº de factura). Cada comprobante nuevo crea una factura abierta en Cta.Cte.</p>
         <input type="file" id="fileVentas" accept=".xls,.xlsx" class="text-xs w-full border border-slate-300 rounded-lg p-2">
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-slate-600 whitespace-nowrap">Plazo de pago (días):</label>
+          <input type="number" id="plazoPago" value="15" class="border border-slate-300 rounded-lg px-2 py-1 text-xs w-20">
+          <span class="text-[10px] text-slate-400">se usa para calcular el vencimiento (el archivo no lo trae)</span>
+        </div>
         <button onclick="procesarVentas()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-medium w-full flex items-center justify-center gap-2"><i data-lucide="upload-cloud" class="w-4 h-4"></i>Procesar y subir ventas</button>
         <div id="ventasResultado" class="text-xs"></div>
       </div>
@@ -340,40 +346,66 @@ function leerArchivo(file) {
 }
 
 function esFecha(v) { return v instanceof Date && !isNaN(v); }
+function vacio(v) { return v === undefined || v === null || v === ''; }
+
+// ═══════════════════════════════════════════════════════════════
+// PARSER — formato "Detalle de Comprobantes por Cliente"
+// Estructura jerárquica: Vendedor -> Zona -> Cliente -> Comprobante -> Items
+// - Fila "Vendedor :" col0, código en col1
+// - Fila cliente: col0 = código con puntos ("6.301"), col2 = nombre,
+//   col5 = dirección, col8 = localidad
+// - Fila comprobante: col0 = fecha (Date), col1 = nº de comprobante
+// - Fila item: col0/col1 vacíos, col2 = código SKU, col3 = descripción,
+//   col8 = bultos/unidades, col9 = importe
+// - Fila totalizadora (repite el último item, col2 vacío): se ignora
+// ═══════════════════════════════════════════════════════════════
+function parsearComprobantes(rows) {
+  let cliente = null, codCliente = null, vendedor = null, zona = null, comprobante = null, fecha = null;
+  const itemLineas = [];
+  const facturasMap = {};
+
+  for (const r of rows) {
+    const c0 = r[0], c1 = r[1], c2 = r[2];
+    if (typeof c0 === 'string' && c0.trim().replace(/\s+/g, ' ').startsWith('Vendedor')) { vendedor = String(c1).trim(); continue; }
+    if (typeof c0 === 'string' && c0.trim().replace(/\s+/g, ' ').startsWith('Zona')) { zona = r[2] ? String(r[2]).trim() : String(c1).trim(); continue; }
+    if (typeof c0 === 'string' && /^[\d.]+$/.test(c0.trim()) && typeof c2 === 'string' && c2.trim()) {
+      codCliente = c0.trim().replace(/\./g, ''); cliente = c2.trim(); continue;
+    }
+    if (esFecha(c0) && typeof c1 === 'string' && c1.trim()) { fecha = Utilities_formatDate(c0); comprobante = c1.trim(); continue; }
+    // fila item: c0 y c1 vacios, c2 (SKU) presente
+    if (vacio(c0) && vacio(c1) && !vacio(c2) && comprobante) {
+      const importe = Number(r[9] || 0);
+      itemLineas.push({ Fecha: fecha, CodCliente: codCliente, Cliente: cliente, Localidad: '', Zona: zona, Vendedor: vendedor, Comprobante: comprobante, CodSKU: c2, DescSKU: r[3], Importe: importe, Volumen: Number(r[8] || 0) });
+      const key = comprobante;
+      if (!facturasMap[key]) facturasMap[key] = { Fecha: fecha, Cliente: cliente, CodCliente: codCliente, Comprobante: comprobante, Monto: 0 };
+      facturasMap[key].Monto += importe;
+    }
+  }
+  return { itemLineas, facturas: Object.values(facturasMap) };
+}
 
 async function procesarVentas() {
   const input = document.getElementById('fileVentas');
   const out = document.getElementById('ventasResultado');
+  const plazo = Number(document.getElementById('plazoPago').value || 0);
   if (!input.files.length) { out.innerHTML = '<span class="text-rose-600">Elegí un archivo primero.</span>'; return; }
   out.innerHTML = '<span class="spinner"></span> Procesando...';
   try {
     const rows = await leerArchivo(input.files[0]);
-    // autodetectar inicio de datos: primera fila con Fecha valida y CodSKU no vacio
-    let start = -1;
-    for (let i = 0; i < Math.min(rows.length, 20); i++) {
-      if (esFecha(rows[i][0]) && rows[i][9]) { start = i; break; }
-    }
-    if (start === -1) throw new Error('No se pudo detectar el inicio de los datos. Verificá el formato del archivo.');
-    const data = [];
-    let fechaStr = '';
-    for (let i = start; i < rows.length; i++) {
-      const r = rows[i];
-      if (!esFecha(r[0])) continue;
-      fechaStr = Utilities_formatDate(r[0]);
-      data.push({
-        Fecha: fechaStr, CodCliente: r[1], Cliente: r[2], Localidad: r[5], Ramo: r[6],
-        Vendedor: r[7], CodSKU: r[9], DescSKU: r[11], Importe: Number(r[13] || 0), Volumen: Number(r[14] || 0)
-      });
-    }
-    if (!API_URL) { out.innerHTML = `<span class="text-amber-600">Parseado OK: ${data.length} líneas, total ${fmtMoney(data.reduce((a,d)=>a+d.Importe,0))}. Configurá la API arriba para subirlo.</span>`; return; }
+    const { itemLineas, facturas } = parsearComprobantes(rows);
+    if (!itemLineas.length) throw new Error('No se pudo detectar ningún comprobante. Verificá el formato del archivo.');
+    const fechaStr = itemLineas[0].Fecha;
+    const total = itemLineas.reduce((a, d) => a + d.Importe, 0);
+    if (!API_URL) { out.innerHTML = `<span class="text-amber-600">Parseado OK: ${itemLineas.length} líneas, ${facturas.length} comprobantes, total ${fmtMoney(total)}. Configurá la API arriba para subirlo.</span>`; return; }
     const fd = new FormData();
     fd.append('action', 'uploadVentas');
     fd.append('fecha', fechaStr);
-    fd.append('data', JSON.stringify(data));
+    fd.append('plazoDias', plazo);
+    fd.append('data', JSON.stringify({ itemLineas, facturas }));
     const resp = await fetch(API_URL, { method: 'POST', body: fd });
     const json = await resp.json();
     if (json.ok) {
-      out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas cargadas — total ${fmtMoney(json.total)}</span>`;
+      out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas — total ${fmtMoney(json.total)} · ${json.facturasCreadas} facturas nuevas en cta.cte. · ${json.facturasOmitidas} ya existían</span>`;
       cargarDashboard();
     } else {
       out.innerHTML = `<span class="text-rose-600">${json.error}</span>`;
@@ -501,7 +533,15 @@ async function cargarDashboard() {
 
     document.getElementById('lastUpdateBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Última venta: ${d.ultimaFecha || '—'}`;
     document.getElementById('kpiVentas').textContent = fmtMoney(d.ventasHoyTotal);
+    document.getElementById('kpiVentasSub').textContent = d.ultimaFecha ? `Día ${d.ultimaFecha}` : 'Sin datos aún';
     document.getElementById('kpiCobranza').textContent = fmtMoney(d.cobranzasHoyTotal);
+    document.getElementById('kpiCobranzaSub').textContent = d.ultimaFecha ? `Día ${d.ultimaFecha}` : 'Sin datos aún';
+
+    const tbodyVend = document.getElementById('tablaVentasVendedor');
+    tbodyVend.innerHTML = (d.ventasPorVendedor && d.ventasPorVendedor.length)
+      ? d.ventasPorVendedor.map(v => `<tr><td class="p-2 font-medium">${v.vendedor}</td><td class="p-2 text-right font-bold">${fmtMoney(v.total)}</td></tr>`).join('')
+      : '<tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos aún</td></tr>';
+
     document.getElementById('kpiCtaCte').textContent = fmtMoney(d.ctacte.total);
     const pctVenc = d.ctacte.total ? Math.round((d.ctacte.venc1_30 + d.ctacte.vencMas30) / d.ctacte.total * 100) : 0;
     document.getElementById('kpiCtaCteSub').textContent = `${pctVenc}% vencida`;
