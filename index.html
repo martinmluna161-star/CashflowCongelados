@@ -17,8 +17,20 @@
   .spinner{border:2px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;width:14px;height:14px;animation:spin .7s linear infinite;display:inline-block;}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+
+<!-- PANTALLA DE LOGIN -->
+<div id="loginScreen" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center space-y-4">
+    <div class="bg-blue-600 w-14 h-14 rounded-xl flex items-center justify-center mx-auto"><i data-lucide="trending-up" class="w-7 h-7 text-white"></i></div>
+    <h1 class="text-lg font-bold text-slate-800">Congelados Puntanos</h1>
+    <p class="text-xs text-slate-500">Tablero de Cashflow — acceso restringido. Iniciá sesión con tu cuenta de Google autorizada.</p>
+    <div id="googleSignInBtn" class="flex justify-center pt-2"></div>
+    <p id="loginError" class="text-xs text-rose-600 hidden"></p>
+  </div>
+</div>
 
 <!-- BANNER CONFIG API -->
 <div id="configBanner" class="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-3 flex items-center justify-center gap-2 flex-wrap">
@@ -44,6 +56,7 @@
         <span class="w-2 h-2 rounded-full bg-slate-400"></span> Sin conectar
       </span>
       <button onclick="cargarDashboard()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Actualizar</button>
+      <button onclick="cerrarSesion()" class="bg-slate-800 hover:bg-rose-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2"><i data-lucide="log-out" class="w-3.5 h-3.5"></i>Salir</button>
     </div>
   </div>
   <div class="bg-slate-800 border-t border-slate-700">
@@ -298,6 +311,67 @@ lucide.createIcons();
 // ═══════════════════════════════════════════════════════════════
 const DEFAULT_API_URL = document.getElementById('apiUrlInput').value.trim(); // por si la pegaste directo en el HTML
 let API_URL = localStorage.getItem('cp_api_url') || DEFAULT_API_URL || '';
+
+// ═══════════════════════════════════════════════════════════════
+// LOGIN — Google Identity Services
+// ═══════════════════════════════════════════════════════════════
+const GOOGLE_CLIENT_ID = '1011747201592-4n2u4d7luh2a4gcregmo91ppqdqbno47.apps.googleusercontent.com';
+let googleIdToken = sessionStorage.getItem('cp_id_token') || null;
+
+function initLogin() {
+  if (googleIdToken) { ocultarLogin(); return; }
+  if (typeof google === 'undefined' || !google.accounts) { setTimeout(initLogin, 300); return; }
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn });
+  google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), { theme: 'outline', size: 'large', text: 'signin_with' });
+}
+
+function onGoogleSignIn(response) {
+  googleIdToken = response.credential;
+  sessionStorage.setItem('cp_id_token', googleIdToken);
+  // Verificamos contra el backend antes de dar por buena la sesion
+  verificarSesion();
+}
+
+async function verificarSesion() {
+  const err = document.getElementById('loginError');
+  if (!API_URL) { ocultarLogin(); return; } // sin API configurada todavia, dejamos pasar para poder configurarla
+  try {
+    const resp = await fetch(`${API_URL}?action=dashboard&idToken=${encodeURIComponent(googleIdToken)}`);
+    const json = await resp.json();
+    if (json.error === 'NO_AUTORIZADO') {
+      err.textContent = 'Tu cuenta no está autorizada para ver este tablero. Pedile acceso a Martín.';
+      err.classList.remove('hidden');
+      googleIdToken = null;
+      sessionStorage.removeItem('cp_id_token');
+      return;
+    }
+    ocultarLogin();
+    cargarDashboard();
+  } catch (e) {
+    err.textContent = 'Error verificando la sesión: ' + e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+function ocultarLogin() {
+  document.getElementById('loginScreen').classList.add('hidden');
+}
+
+function cerrarSesion() {
+  googleIdToken = null;
+  sessionStorage.removeItem('cp_id_token');
+  location.reload();
+}
+
+// Helper: agrega el idToken a cualquier request a la API (GET query o POST FormData)
+function apiUrlConToken(urlBase) {
+  const sep = urlBase.includes('?') ? '&' : '?';
+  return `${urlBase}${sep}idToken=${encodeURIComponent(googleIdToken || '')}`;
+}
+function fdConToken(fd) {
+  fd.append('idToken', googleIdToken || '');
+  return fd;
+}
 document.getElementById('apiUrlInput').value = API_URL;
 if (API_URL) document.getElementById('configBanner').classList.add('hidden');
 
@@ -402,7 +476,7 @@ async function procesarVentas() {
     fd.append('fecha', fechaStr);
     fd.append('plazoDias', plazo);
     fd.append('data', JSON.stringify({ itemLineas, facturas }));
-    const resp = await fetch(API_URL, { method: 'POST', body: fd });
+    const resp = await fetch(API_URL, { method: 'POST', body: fdConToken(fd) });
     const json = await resp.json();
     if (json.ok) {
       out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas — total ${fmtMoney(json.total)} · ${json.facturasCreadas} facturas nuevas en cta.cte. · ${json.facturasOmitidas} ya existían</span>`;
@@ -451,7 +525,7 @@ async function procesarCobranzas() {
     fd.append('action', 'uploadCobranzas');
     fd.append('fecha', fechaStr);
     fd.append('data', JSON.stringify(data));
-    const resp = await fetch(API_URL, { method: 'POST', body: fd });
+    const resp = await fetch(API_URL, { method: 'POST', body: fdConToken(fd) });
     const json = await resp.json();
     if (json.ok) {
       out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas · ${json.pagadas} pagadas · ${json.parciales} parciales · ${json.pendientes} a conciliar · ${json.duplicados} duplicados ignorados</span>`;
@@ -480,7 +554,7 @@ async function postAccion(action, data, outId) {
   const fd = new FormData();
   fd.append('action', action);
   fd.append('data', JSON.stringify(data));
-  const resp = await fetch(API_URL, { method: 'POST', body: fd });
+  const resp = await fetch(API_URL, { method: 'POST', body: fdConToken(fd) });
   const json = await resp.json();
   if (out) out.innerHTML = json.ok ? '<span class="text-emerald-600 font-semibold">✓ Guardado</span>' : `<span class="text-rose-600">${json.error}</span>`;
   return json;
@@ -527,8 +601,15 @@ let bucketActivo = 'todos';
 async function cargarDashboard() {
   if (!API_URL) return;
   try {
-    const resp = await fetch(`${API_URL}?action=dashboard`);
+    const resp = await fetch(apiUrlConToken(`${API_URL}?action=dashboard`));
     const d = await resp.json();
+    if (d.error === 'NO_AUTORIZADO') {
+      sessionStorage.removeItem('cp_id_token'); googleIdToken = null;
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('loginError').textContent = 'Tu sesión venció o no está autorizada. Volvé a iniciar sesión.';
+      document.getElementById('loginError').classList.remove('hidden');
+      return;
+    }
     if (d.error) { console.error(d.error); return; }
 
     document.getElementById('lastUpdateBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Última venta: ${d.ultimaFecha || '—'}`;
@@ -562,7 +643,7 @@ async function cargarDashboard() {
       .map(([p, v]) => `<tr><td class="p-3 font-medium">${p}</td><td class="p-3 text-right font-bold">${fmtMoney(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos</td></tr>';
 
     // pendientes de conciliar
-    const respPend = await fetch(`${API_URL}?action=pendientes`);
+    const respPend = await fetch(apiUrlConToken(`${API_URL}?action=pendientes`));
     const pend = await respPend.json();
     const tbodyPend = document.getElementById('tablaPendientes');
     tbodyPend.innerHTML = pend.length ? pend.map(p => `<tr><td class="p-2">${p.Fecha}</td><td class="p-2">${p.Cliente}</td><td class="p-2">${p.Comprobante}</td><td class="p-2 text-right">${fmtMoney(p.Monto)}</td><td class="p-2">${p.Motivo}</td></tr>`).join('') : '<tr><td colspan="5" class="p-4 text-center text-slate-400">Sin pendientes</td></tr>';
@@ -712,7 +793,7 @@ function imprimirListado() {
 }
 
 // Init
-if (API_URL) cargarDashboard();
+initLogin();
 </script>
 </body>
 </html>
