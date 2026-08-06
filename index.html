@@ -339,15 +339,11 @@
 <script>
 lucide.createIcons();
 
-// ═══════════════════════════════════════════════════════════════
 // CONFIG API
-// ═══════════════════════════════════════════════════════════════
-const DEFAULT_API_URL = document.getElementById('apiUrlInput').value.trim(); // por si la pegaste directo en el HTML
+const DEFAULT_API_URL = document.getElementById('apiUrlInput').value.trim();
 let API_URL = localStorage.getItem('cp_api_url') || DEFAULT_API_URL || '';
 
-// ═══════════════════════════════════════════════════════════════
 // LOGIN — Google Identity Services
-// ═══════════════════════════════════════════════════════════════
 const GOOGLE_CLIENT_ID = '1011747201592-4n2u4d7luh2a4gcregmo91ppqdqbno47.apps.googleusercontent.com';
 let googleIdToken = sessionStorage.getItem('cp_id_token') || null;
 
@@ -361,13 +357,12 @@ function initLogin() {
 function onGoogleSignIn(response) {
   googleIdToken = response.credential;
   sessionStorage.setItem('cp_id_token', googleIdToken);
-  // Verificamos contra el backend antes de dar por buena la sesion
   verificarSesion();
 }
 
 async function verificarSesion() {
   const err = document.getElementById('loginError');
-  if (!API_URL) { ocultarLogin(); return; } // sin API configurada todavia, dejamos pasar para poder configurarla
+  if (!API_URL) { ocultarLogin(); return; }
   try {
     const resp = await fetch(`${API_URL}?action=dashboard&idToken=${encodeURIComponent(googleIdToken)}`);
     const json = await resp.json();
@@ -396,7 +391,6 @@ function cerrarSesion() {
   location.reload();
 }
 
-// Helper: agrega el idToken a cualquier request a la API (GET query o POST FormData)
 function apiUrlConToken(urlBase) {
   const sep = urlBase.includes('?') ? '&' : '?';
   return `${urlBase}${sep}idToken=${encodeURIComponent(googleIdToken || '')}`;
@@ -420,9 +414,7 @@ function fmtMoney(n) {
   return '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
 }
 
-// ═══════════════════════════════════════════════════════════════
 // TABS
-// ═══════════════════════════════════════════════════════════════
 function switchTab(tab) {
   const tabs = ['resumen', 'cumplimiento', 'ventas', 'cobranzas', 'compras', 'gastos', 'deuda', 'historico', 'alertas'];
   tabs.forEach(t => { document.getElementById(`view-${t}`).classList.add('hidden'); document.getElementById(`tab-${t}`).classList.remove('active-tab'); });
@@ -430,12 +422,6 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active-tab');
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CARGA DE VENTAS (parseo client-side)
-// Estructura real del export Axum: datos desde la fila 7 (índice 6),
-// columnas: 0 Fecha, 1 CodCli, 2 Razon, 3 Direccion, 5 Localidad,
-// 6 Ramo, 7 Vendedor, 9 CodSKU, 11 DescSKU, 13 Precio(=importe), 14 Volumen
-// ═══════════════════════════════════════════════════════════════
 function leerArchivo(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -455,17 +441,6 @@ function leerArchivo(file) {
 function esFecha(v) { return v instanceof Date && !isNaN(v); }
 function vacio(v) { return v === undefined || v === null || v === ''; }
 
-// ═══════════════════════════════════════════════════════════════
-// PARSER — formato "Detalle de Comprobantes por Cliente"
-// Estructura jerárquica: Vendedor -> Zona -> Cliente -> Comprobante -> Items
-// - Fila "Vendedor :" col0, código en col1
-// - Fila cliente: col0 = código con puntos ("6.301"), col2 = nombre,
-//   col5 = dirección, col8 = localidad
-// - Fila comprobante: col0 = fecha (Date), col1 = nº de comprobante
-// - Fila item: col0/col1 vacíos, col2 = código SKU, col3 = descripción,
-//   col8 = bultos/unidades, col9 = importe
-// - Fila totalizadora (repite el último item, col2 vacío): se ignora
-// ═══════════════════════════════════════════════════════════════
 function parsearComprobantes(rows) {
   let cliente = null, codCliente = null, vendedor = null, zona = null, comprobante = null, fecha = null;
   const itemLineas = [];
@@ -479,7 +454,6 @@ function parsearComprobantes(rows) {
       codCliente = c0.trim().replace(/\./g, ''); cliente = c2.trim(); continue;
     }
     if (esFecha(c0) && typeof c1 === 'string' && c1.trim()) { fecha = Utilities_formatDate(c0); comprobante = c1.trim(); continue; }
-    // fila item: c0 y c1 vacios, c2 (SKU) presente
     if (vacio(c0) && vacio(c1) && !vacio(c2) && comprobante) {
       const importe = Number(r[9] || 0);
       itemLineas.push({ Fecha: fecha, CodCliente: codCliente, Cliente: cliente, Localidad: '', Zona: zona, Vendedor: vendedor, Comprobante: comprobante, CodSKU: c2, DescSKU: r[3], Importe: importe, Volumen: Number(r[8] || 0) });
@@ -522,12 +496,6 @@ async function procesarVentas() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CARGA DE COBRANZAS (parseo client-side)
-// Estructura real: header en fila índice 1, datos desde índice 2.
-// columnas: 0 Cliente, 1 Recibo, 2 FechaRecibo, 3 $Imputado, 5 Comprobante,
-// 6 Fecha comprobante, 7 $Comprobante, 8 Vendedor, 9 DiasDif
-// ═══════════════════════════════════════════════════════════════
 async function procesarCobranzas() {
   const input = document.getElementById('fileCobranzas');
   const out = document.getElementById('cobranzasResultado');
@@ -577,9 +545,6 @@ function Utilities_formatDate(d) {
   return `${dd}/${mm}/${d.getFullYear()}`;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FORMULARIOS SIMPLES (facturas proveedor, gastos, asignación crédito)
-// ═══════════════════════════════════════════════════════════════
 async function postAccion(action, data, outId) {
   const out = outId ? document.getElementById(outId) : null;
   if (!API_URL) { if (out) out.innerHTML = '<span class="text-amber-600">Configurá la API primero.</span>'; return; }
@@ -622,9 +587,7 @@ function cargarDescubiertosSemanales() {
   postAccion('actualizarSeguimiento', data, 'descubiertosResultado').then(() => cargarDashboard());
 }
 
-// ═══════════════════════════════════════════════════════════════
-// DASHBOARD — carga de datos reales
-// ═══════════════════════════════════════════════════════════════
+// DASHBOARD
 let chartCashflow, chartHistorico;
 let facturasDetalle = [];
 let bucketActivo = 'todos';
@@ -660,12 +623,10 @@ async function cargarDashboard() {
     document.getElementById('kpiProveedores').textContent = fmtMoney(d.proveedores.total);
     document.getElementById('planActivoLabel').textContent = d.planActivo ? d.planActivo.NombrePlan : 'Sin plan activo';
 
-    // Credito Nacion (antes estaba fijo en el HTML)
     document.getElementById('kpiCredito').textContent = fmtMoney(d.creditoNacionTotal);
     const pctUsado = d.creditoNacionTotal ? Math.round((d.creditoNacionUsado / d.creditoNacionTotal) * 100) : 0;
     document.getElementById('kpiCreditoSub').textContent = `${fmtMoney(d.creditoNacionUsado)} usado (${pctUsado}%)`;
 
-    // Compromisos de la semana
     if (d.semanaActual) {
       document.getElementById('semanaActualLabel').textContent = `Semana ${d.semanaActual.semana} · ${d.semanaActual.fecha}`;
       document.getElementById('compromisosTexto').innerHTML = (d.semanaActual.compromisos || '').split(' | ').map(c => `<div class="flex items-start gap-2 py-1"><i data-lucide="dot" class="w-3 h-3 mt-0.5 text-blue-500 shrink-0"></i><span>${c}</span></div>`).join('');
@@ -677,7 +638,6 @@ async function cargarDashboard() {
       lucide.createIcons();
     }
 
-    // detalle completo de facturas (para filtros, clic en buckets e impresion)
     facturasDetalle = d.ctacte.detalle || [];
     document.getElementById('ctacteTotal').textContent = fmtMoney(d.ctacte.total);
     document.getElementById('ctacteAVencer').textContent = fmtMoney(d.ctacte.aVencer);
@@ -685,18 +645,15 @@ async function cargarDashboard() {
     document.getElementById('ctacteVencMas30').textContent = fmtMoney(d.ctacte.vencMas30);
     renderTablaFacturas();
 
-    // proveedores
     const tbodyProv = document.getElementById('tablaProveedores');
     tbodyProv.innerHTML = Object.entries(d.proveedores.porProveedor).sort((a, b) => b[1] - a[1])
       .map(([p, v]) => `<tr><td class="p-3 font-medium">${p}</td><td class="p-3 text-right font-bold">${fmtMoney(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="p-4 text-center text-slate-400">Sin datos</td></tr>';
 
-    // pendientes de conciliar
     const respPend = await fetch(apiUrlConToken(`${API_URL}?action=pendientes`));
     const pend = await respPend.json();
     const tbodyPend = document.getElementById('tablaPendientes');
     tbodyPend.innerHTML = pend.length ? pend.map(p => `<tr><td class="p-2">${p.Fecha}</td><td class="p-2">${p.Cliente}</td><td class="p-2">${p.Comprobante}</td><td class="p-2 text-right">${fmtMoney(p.Monto)}</td><td class="p-2">${p.Motivo}</td></tr>`).join('') : '<tr><td colspan="5" class="p-4 text-center text-slate-400">Sin pendientes</td></tr>';
 
-    // compromisos por semana (desde Seguimiento_Semanal)
     const tbodyCump = document.getElementById('tablaCumplimiento');
     tbodyCump.innerHTML = d.cumplimiento.map(c => {
       const estado = c.Estado || '';
@@ -704,11 +661,9 @@ async function cargarDashboard() {
       return `<tr><td class="p-3">${c.Semana}</td><td class="p-3">${c.Fecha}</td><td class="p-3 text-slate-600">${c.Compromisos || ''}</td><td class="p-3 text-right font-medium">${fmtMoney(c.CostosFijos)}</td><td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-semibold ${color}">${estado}</span></td></tr>`;
     }).join('') || '<tr><td colspan="5" class="p-4 text-center text-slate-400">Sin datos aún</td></tr>';
 
-    // deuda financiera
     const tbodyDeuda = document.getElementById('tablaDeuda');
     tbodyDeuda.innerHTML = d.deuda.map(x => `<tr><td class="p-3 font-medium">${x.Banco}</td><td class="p-3">${x.TipoDeuda}</td><td class="p-3">${x.Vencimiento}</td><td class="p-3 text-right">${fmtMoney(x.MontoTotal)}</td><td class="p-3 text-right">${fmtMoney(x.SaldoPendiente)}</td></tr>`).join('');
 
-    // cashflow tabla + chart
     const tbodyCF = document.getElementById('tablaCashflow');
     const plan = d.cashflow.plan, real = d.cashflow.real;
     tbodyCF.innerHTML = plan.map(p => {
@@ -716,7 +671,6 @@ async function cargarDashboard() {
       return `<tr><td class="p-3">${p.Sem}</td><td class="p-3">${p.Fecha}</td><td class="p-3 text-right">${fmtMoney(p.Ventas)}</td><td class="p-3 text-right">${r ? fmtMoney(r.VentasReal) : '—'}</td><td class="p-3 text-right">${fmtMoney(p.FlujoAcumProyectado)}</td><td class="p-3 text-right">${r ? fmtMoney(r.FlujoAcumReal) : '—'}</td></tr>`;
     }).join('');
 
-    // Cierre semanal: solo las semanas que ya tienen Ventas Real cargada
     const tbodyCierre = document.getElementById('tablaCierre');
     const cerradas = plan.filter(p => real.find(x => String(x.Sem) === String(p.Sem)));
     tbodyCierre.innerHTML = cerradas.length ? cerradas.map(p => {
@@ -728,7 +682,6 @@ async function cargarDashboard() {
 
     renderCashflowChart(plan, real);
 
-    // historico
     if (d.historico && d.historico.length) renderHistoricoChart(d.historico);
 
   } catch (err) {
