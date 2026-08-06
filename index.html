@@ -36,7 +36,7 @@
 <div id="configBanner" class="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-3 flex items-center justify-center gap-2 flex-wrap">
   <i data-lucide="settings" class="w-3.5 h-3.5"></i>
   <span>Configurá la URL de tu Apps Script Web App para conectar datos reales:</span>
-  <input id="apiUrlInput" type="text" value="https://script.google.com/macros/s/AKfycbwImk9PUjgbOD7SMJQHrP89ZEPdonIjYBF57q5C7xKLoNCbMy8WeEk66_g0V-O6PkRR/exec" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="text-slate-800 text-xs rounded px-2 py-1 w-80 max-w-full">
+  <input id="apiUrlInput" type="text" value="https://script.google.com/macros/s/AKfycby8nBtfmJp2D8pbY8vk2Hgnuq0yUc1y9U847x8fHIoCiceYi_z9lIHjce6oS34_tQjA/exec" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="text-slate-800 text-xs rounded px-2 py-1 w-80 max-w-full">
   <button onclick="guardarApiUrl()" class="bg-slate-900 hover:bg-slate-800 px-3 py-1 rounded text-xs font-semibold">Guardar</button>
   <span id="apiStatus" class="text-xs font-semibold"></span>
 </div>
@@ -130,6 +130,19 @@
           <p class="text-[10px] uppercase text-slate-500 font-semibold">Estado de la semana</p>
           <p class="text-lg font-bold" id="estadoSemanaTexto">—</p>
         </div>
+      </div>
+    </div>
+
+    <div class="bg-white p-5 rounded-xl border-2 border-emerald-200 shadow-sm space-y-3" id="panelCierre">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600"></i>Cierre Semanal — Plan vs. Real</h2>
+        <span class="text-[11px] text-slate-400">Se arma sola con las semanas que ya tienen Ventas Real cargada — crece cada lunes</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Sem</th><th class="p-3">Fecha</th><th class="p-3 text-right">Ventas Plan</th><th class="p-3 text-right">Ventas Real</th><th class="p-3 text-right">Desvío</th><th class="p-3 text-right">Flujo Acum. Real</th></tr></thead>
+          <tbody id="tablaCierre" class="divide-y divide-slate-100"><tr><td colspan="6" class="p-4 text-center text-slate-400">Sin semanas cerradas todavía</td></tr></tbody>
+        </table>
       </div>
     </div>
 
@@ -702,6 +715,16 @@ async function cargarDashboard() {
       const r = real.find(x => String(x.Sem) === String(p.Sem));
       return `<tr><td class="p-3">${p.Sem}</td><td class="p-3">${p.Fecha}</td><td class="p-3 text-right">${fmtMoney(p.Ventas)}</td><td class="p-3 text-right">${r ? fmtMoney(r.VentasReal) : '—'}</td><td class="p-3 text-right">${fmtMoney(p.FlujoAcumProyectado)}</td><td class="p-3 text-right">${r ? fmtMoney(r.FlujoAcumReal) : '—'}</td></tr>`;
     }).join('');
+
+    // Cierre semanal: solo las semanas que ya tienen Ventas Real cargada
+    const tbodyCierre = document.getElementById('tablaCierre');
+    const cerradas = plan.filter(p => real.find(x => String(x.Sem) === String(p.Sem)));
+    tbodyCierre.innerHTML = cerradas.length ? cerradas.map(p => {
+      const r = real.find(x => String(x.Sem) === String(p.Sem));
+      const desvioPct = p.Ventas ? ((r.VentasReal - p.Ventas) / p.Ventas * 100) : 0;
+      const desvioColor = desvioPct < -5 ? 'text-rose-600' : desvioPct > 5 ? 'text-emerald-600' : 'text-slate-500';
+      return `<tr><td class="p-3 font-bold">${p.Sem}</td><td class="p-3">${p.Fecha}</td><td class="p-3 text-right">${fmtMoney(p.Ventas)}</td><td class="p-3 text-right font-semibold">${fmtMoney(r.VentasReal)}</td><td class="p-3 text-right font-semibold ${desvioColor}">${desvioPct>=0?'+':''}${desvioPct.toFixed(1)}%</td><td class="p-3 text-right font-semibold">${fmtMoney(r.FlujoAcumReal)}</td></tr>`;
+    }).join('') : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Sin semanas cerradas todavía</td></tr>';
 
     renderCashflowChart(plan, real);
 
