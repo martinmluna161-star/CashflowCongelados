@@ -17,20 +17,8 @@
   .spinner{border:2px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;width:14px;height:14px;animation:spin .7s linear infinite;display:inline-block;}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
-
-<!-- PANTALLA DE LOGIN -->
-<div id="loginScreen" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-50">
-  <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center space-y-4">
-    <div class="bg-blue-600 w-14 h-14 rounded-xl flex items-center justify-center mx-auto"><i data-lucide="trending-up" class="w-7 h-7 text-white"></i></div>
-    <h1 class="text-lg font-bold text-slate-800">Congelados Puntanos</h1>
-    <p class="text-xs text-slate-500">Tablero de Cashflow — acceso restringido. Iniciá sesión con tu cuenta de Google autorizada.</p>
-    <div id="googleSignInBtn" class="flex justify-center pt-2"></div>
-    <p id="loginError" class="text-xs text-rose-600 hidden"></p>
-  </div>
-</div>
 
 <!-- BANNER CONFIG API -->
 <div id="configBanner" class="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-3 flex items-center justify-center gap-2 flex-wrap">
@@ -56,7 +44,6 @@
         <span class="w-2 h-2 rounded-full bg-slate-400"></span> Sin conectar
       </span>
       <button onclick="cargarDashboard()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Actualizar</button>
-      <button onclick="cerrarSesion()" class="bg-slate-800 hover:bg-rose-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2"><i data-lucide="log-out" class="w-3.5 h-3.5"></i>Salir</button>
     </div>
   </div>
   <div class="bg-slate-800 border-t border-slate-700">
@@ -130,19 +117,6 @@
           <p class="text-[10px] uppercase text-slate-500 font-semibold">Estado de la semana</p>
           <p class="text-lg font-bold" id="estadoSemanaTexto">—</p>
         </div>
-      </div>
-    </div>
-
-    <div class="bg-white p-5 rounded-xl border-2 border-emerald-200 shadow-sm space-y-3" id="panelCierre">
-      <div class="flex justify-between items-center flex-wrap gap-2">
-        <h2 class="font-bold text-slate-800 text-base flex items-center gap-2"><i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600"></i>Cierre Semanal — Plan vs. Real</h2>
-        <span class="text-[11px] text-slate-400">Se arma sola con las semanas que ya tienen Ventas Real cargada — crece cada lunes</span>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs text-slate-600">
-          <thead class="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200"><tr><th class="p-3">Sem</th><th class="p-3">Fecha</th><th class="p-3 text-right">Ventas Plan</th><th class="p-3 text-right">Ventas Real</th><th class="p-3 text-right">Desvío</th><th class="p-3 text-right">Flujo Acum. Real</th></tr></thead>
-          <tbody id="tablaCierre" class="divide-y divide-slate-100"><tr><td colspan="6" class="p-4 text-center text-slate-400">Sin semanas cerradas todavía</td></tr></tbody>
-        </table>
       </div>
     </div>
 
@@ -346,81 +320,15 @@ const DEFAULT_API_URL = document.getElementById('apiUrlInput').value.trim(); // 
 let API_URL = localStorage.getItem('cp_api_url') || DEFAULT_API_URL || '';
 
 // ═══════════════════════════════════════════════════════════════
-// LOGIN — Google Identity Services
-// ═══════════════════════════════════════════════════════════════
-const GOOGLE_CLIENT_ID = '1011747201592-4n2u4d7luh2a4gcregmo91ppqdqbno47.apps.googleusercontent.com';
-let googleIdToken = sessionStorage.getItem('cp_id_token') || null;
+// LOGIN — eliminado a pedido del cliente (sin validacion de Google).
+// IMPORTANTE: para que esto funcione de punta a punta, Code.gs tambien debe
+// dejar de exigir idToken en doGet/doPost (ver nota en el mensaje de entrega).
 
-function initLogin() {
-  if (googleIdToken) { ocultarLogin(); return; }
-  if (typeof google === 'undefined' || !google.accounts) { setTimeout(initLogin, 300); return; }
-  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleSignIn });
-  google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), { theme: 'outline', size: 'large', text: 'signin_with' });
-}
+// Helper: se mantienen los nombres de funcion para no tocar el resto del codigo,
+// pero ya no agregan ningun token a la request.
+function apiUrlConToken(urlBase) { return urlBase; }
+function fdConToken(fd) { return fd; }
 
-function onGoogleSignIn(response) {
-  googleIdToken = response.credential;
-  sessionStorage.setItem('cp_id_token', googleIdToken);
-  // Verificamos contra el backend antes de dar por buena la sesion
-  verificarSesion();
-}
-
-async function verificarSesion() {
-  const err = document.getElementById('loginError');
-  if (!API_URL) { ocultarLogin(); return; } // sin API configurada todavia, dejamos pasar para poder configurarla
-  try {
-    const resp = await fetch(`${API_URL}?action=dashboard&idToken=${encodeURIComponent(googleIdToken)}`);
-    const json = await resp.json();
-    if (json.error === 'NO_AUTORIZADO') {
-      err.textContent = 'Tu cuenta no está autorizada para ver este tablero. Pedile acceso a Martín.';
-      err.classList.remove('hidden');
-      googleIdToken = null;
-      sessionStorage.removeItem('cp_id_token');
-      return;
-    }
-    ocultarLogin();
-    cargarDashboard();
-  } catch (e) {
-    err.textContent = 'Error verificando la sesión: ' + e.message;
-    err.classList.remove('hidden');
-  }
-}
-
-function ocultarLogin() {
-  document.getElementById('loginScreen').classList.add('hidden');
-}
-
-// Chequea si una respuesta de la API indica sesion vencida/no autorizada
-// (el idToken de Google vence a la hora). Si es asi, limpia el token,
-// vuelve a mostrar la pantalla de login con un aviso, y devuelve true
-// para que quien llamo corte el flujo. Usar esto en TODAS las respuestas
-// de la API, no solo en cargarDashboard.
-function sesionVencida_(json) {
-  if (json && json.error === 'NO_AUTORIZADO') {
-    sessionStorage.removeItem('cp_id_token'); googleIdToken = null;
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('loginError').textContent = 'Tu sesión venció (el login de Google dura 1 hora). Volvé a iniciar sesión y repetí la acción.';
-    document.getElementById('loginError').classList.remove('hidden');
-    return true;
-  }
-  return false;
-}
-
-function cerrarSesion() {
-  googleIdToken = null;
-  sessionStorage.removeItem('cp_id_token');
-  location.reload();
-}
-
-// Helper: agrega el idToken a cualquier request a la API (GET query o POST FormData)
-function apiUrlConToken(urlBase) {
-  const sep = urlBase.includes('?') ? '&' : '?';
-  return `${urlBase}${sep}idToken=${encodeURIComponent(googleIdToken || '')}`;
-}
-function fdConToken(fd) {
-  fd.append('idToken', googleIdToken || '');
-  return fd;
-}
 document.getElementById('apiUrlInput').value = API_URL;
 if (API_URL) document.getElementById('configBanner').classList.add('hidden');
 
@@ -495,11 +403,8 @@ function parsearComprobantes(rows) {
       codCliente = c0.trim().replace(/\./g, ''); cliente = c2.trim(); continue;
     }
     if (esFecha(c0) && typeof c1 === 'string' && c1.trim()) { fecha = Utilities_formatDate(c0); comprobante = c1.trim(); continue; }
-    // fila item: c0 y c1 vacios, c2 = codigo SKU REALMENTE NUMERICO.
-    // (la ultima fila del archivo es un resumen "Total General" que
-    // tambien tiene c0/c1 vacios pero c2 es texto, no un SKU - si no
-    // se filtra, se suma como si fuera un item mas de la ultima factura)
-    if (vacio(c0) && vacio(c1) && typeof c2 === 'number' && comprobante) {
+    // fila item: c0 y c1 vacios, c2 (SKU) presente
+    if (vacio(c0) && vacio(c1) && !vacio(c2) && comprobante) {
       const importe = Number(r[9] || 0);
       itemLineas.push({ Fecha: fecha, CodCliente: codCliente, Cliente: cliente, Localidad: '', Zona: zona, Vendedor: vendedor, Comprobante: comprobante, CodSKU: c2, DescSKU: r[3], Importe: importe, Volumen: Number(r[8] || 0) });
       const key = comprobante;
@@ -530,7 +435,6 @@ async function procesarVentas() {
     fd.append('data', JSON.stringify({ itemLineas, facturas }));
     const resp = await fetch(API_URL, { method: 'POST', body: fdConToken(fd) });
     const json = await resp.json();
-    if (sesionVencida_(json)) return;
     if (json.ok) {
       out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas — total ${fmtMoney(json.total)} · ${json.facturasCreadas} facturas nuevas en cta.cte. · ${json.facturasOmitidas} ya existían</span>`;
       cargarDashboard();
@@ -580,9 +484,8 @@ async function procesarCobranzas() {
     fd.append('data', JSON.stringify(data));
     const resp = await fetch(API_URL, { method: 'POST', body: fdConToken(fd) });
     const json = await resp.json();
-    if (sesionVencida_(json)) return;
     if (json.ok) {
-      out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas · ${json.pagadas} pagadas · ${json.parciales} parciales · ${json.creadas || 0} facturas autocreadas · ${json.pendientes} a conciliar · ${json.duplicados} duplicados ignorados</span>`;
+      out.innerHTML = `<span class="text-emerald-600 font-semibold">✓ ${json.filas} líneas · ${json.pagadas} pagadas · ${json.parciales} parciales · ${json.pendientes} a conciliar · ${json.duplicados} duplicados ignorados</span>`;
       cargarDashboard();
     } else {
       out.innerHTML = `<span class="text-rose-600">${json.error}</span>`;
@@ -610,7 +513,6 @@ async function postAccion(action, data, outId) {
   fd.append('data', JSON.stringify(data));
   const resp = await fetch(API_URL, { method: 'POST', body: fdConToken(fd) });
   const json = await resp.json();
-  if (sesionVencida_(json)) return json;
   if (out) out.innerHTML = json.ok ? '<span class="text-emerald-600 font-semibold">✓ Guardado</span>' : `<span class="text-rose-600">${json.error}</span>`;
   return json;
 }
@@ -656,7 +558,11 @@ async function cargarDashboard() {
   try {
     const resp = await fetch(apiUrlConToken(`${API_URL}?action=dashboard`));
     const d = await resp.json();
-    if (sesionVencida_(d)) return;
+    if (d.error === 'NO_AUTORIZADO') {
+      document.getElementById('lastUpdateBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> Backend rechazo la conexion (revisar Code.gs)`;
+      console.error('NO_AUTORIZADO: recorda sacar la validacion de idToken en Code.gs (doGet/doPost).');
+      return;
+    }
     if (d.error) { console.error(d.error); return; }
 
     document.getElementById('lastUpdateBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Última venta: ${d.ultimaFecha || '—'}`;
@@ -731,16 +637,6 @@ async function cargarDashboard() {
       const r = real.find(x => String(x.Sem) === String(p.Sem));
       return `<tr><td class="p-3">${p.Sem}</td><td class="p-3">${p.Fecha}</td><td class="p-3 text-right">${fmtMoney(p.Ventas)}</td><td class="p-3 text-right">${r ? fmtMoney(r.VentasReal) : '—'}</td><td class="p-3 text-right">${fmtMoney(p.FlujoAcumProyectado)}</td><td class="p-3 text-right">${r ? fmtMoney(r.FlujoAcumReal) : '—'}</td></tr>`;
     }).join('');
-
-    // Cierre semanal: solo las semanas que ya tienen Ventas Real cargada
-    const tbodyCierre = document.getElementById('tablaCierre');
-    const cerradas = plan.filter(p => real.find(x => String(x.Sem) === String(p.Sem)));
-    tbodyCierre.innerHTML = cerradas.length ? cerradas.map(p => {
-      const r = real.find(x => String(x.Sem) === String(p.Sem));
-      const desvioPct = p.Ventas ? ((r.VentasReal - p.Ventas) / p.Ventas * 100) : 0;
-      const desvioColor = desvioPct < -5 ? 'text-rose-600' : desvioPct > 5 ? 'text-emerald-600' : 'text-slate-500';
-      return `<tr><td class="p-3 font-bold">${p.Sem}</td><td class="p-3">${p.Fecha}</td><td class="p-3 text-right">${fmtMoney(p.Ventas)}</td><td class="p-3 text-right font-semibold">${fmtMoney(r.VentasReal)}</td><td class="p-3 text-right font-semibold ${desvioColor}">${desvioPct>=0?'+':''}${desvioPct.toFixed(1)}%</td><td class="p-3 text-right font-semibold">${fmtMoney(r.FlujoAcumReal)}</td></tr>`;
-    }).join('') : '<tr><td colspan="6" class="p-4 text-center text-slate-400">Sin semanas cerradas todavía</td></tr>';
 
     renderCashflowChart(plan, real);
 
@@ -868,7 +764,7 @@ function imprimirListado() {
 }
 
 // Init
-initLogin();
+cargarDashboard();
 </script>
 </body>
 </html>
