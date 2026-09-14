@@ -312,6 +312,13 @@ lucide.createIcons();
 // publicar el HTML.
 const API_URL = 'https://script.google.com/macros/s/AKfycbyAjTNLDJ6CX-vFvGXYgN5NJydOTkFHqq6xHVJ11ceNVRl2e6Dr6ieZPaKTFsFbMI-NmQ/exec';
 
+// Helpers de compatibilidad: ya no hay login ni idToken, asi que estas
+// funciones solo devuelven la URL/FormData tal cual las reciben. Se
+// mantienen (en vez de borrarlas del todo) porque el resto del codigo
+// las sigue llamando en cada fetch.
+function apiUrlConToken(urlBase) { return urlBase; }
+function fdConToken(fd) { return fd; }
+
 
 function fmtMoney(n) {
   n = Number(n || 0);
