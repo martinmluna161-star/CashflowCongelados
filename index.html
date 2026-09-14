@@ -20,15 +20,6 @@
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
 
-<!-- BANNER CONFIG API -->
-<div id="configBanner" class="bg-amber-500 text-white text-center text-xs font-medium py-1.5 px-3 flex items-center justify-center gap-2 flex-wrap">
-  <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-  <span>Configurá la URL de tu Apps Script Web App para conectar datos reales:</span>
-  <input id="apiUrlInput" type="text" value="https://script.google.com/macros/s/AKfycbyAjTNLDJ6CX-vFvGXYgN5NJydOTkFHqq6xHVJ11ceNVRl2e6Dr6ieZPaKTFsFbMI-NmQ/exec" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="text-slate-800 text-xs rounded px-2 py-1 w-80 max-w-full">
-  <button onclick="guardarApiUrl()" class="bg-slate-900 hover:bg-slate-800 px-3 py-1 rounded text-xs font-semibold">Guardar</button>
-  <span id="apiStatus" class="text-xs font-semibold"></span>
-</div>
-
 <!-- HEADER -->
 <header class="bg-slate-900 text-white shadow-lg">
   <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
@@ -316,28 +307,11 @@ lucide.createIcons();
 // ═══════════════════════════════════════════════════════════════
 // CONFIG API
 // ═══════════════════════════════════════════════════════════════
-const DEFAULT_API_URL = document.getElementById('apiUrlInput').value.trim(); // por si la pegaste directo en el HTML
-let API_URL = localStorage.getItem('cp_api_url') || DEFAULT_API_URL || '';
+// URL fija del Apps Script Web App (ya no se pide ni se guarda en el navegador).
+// Para actualizarla en el futuro, cambiar directamente esta linea y volver a
+// publicar el HTML.
+const API_URL = 'https://script.google.com/macros/s/AKfycbyAjTNLDJ6CX-vFvGXYgN5NJydOTkFHqq6xHVJ11ceNVRl2e6Dr6ieZPaKTFsFbMI-NmQ/exec';
 
-// ═══════════════════════════════════════════════════════════════
-// LOGIN — eliminado a pedido del cliente (sin validacion de Google).
-// IMPORTANTE: para que esto funcione de punta a punta, Code.gs tambien debe
-// dejar de exigir idToken en doGet/doPost (ver nota en el mensaje de entrega).
-
-// Helper: se mantienen los nombres de funcion para no tocar el resto del codigo,
-// pero ya no agregan ningun token a la request.
-function apiUrlConToken(urlBase) { return urlBase; }
-function fdConToken(fd) { return fd; }
-
-document.getElementById('apiUrlInput').value = API_URL;
-if (API_URL) document.getElementById('configBanner').classList.add('hidden');
-
-function guardarApiUrl() {
-  API_URL = document.getElementById('apiUrlInput').value.trim();
-  localStorage.setItem('cp_api_url', API_URL);
-  document.getElementById('apiStatus').textContent = 'Guardado ✓';
-  cargarDashboard();
-}
 
 function fmtMoney(n) {
   n = Number(n || 0);
